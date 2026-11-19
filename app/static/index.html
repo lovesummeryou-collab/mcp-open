@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mcp-open 管理后台</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div id="loginView" class="login-view">
+    <form id="loginForm" class="login-card">
+      <div class="brand-mark">M</div>
+      <h1>mcp-open</h1>
+      <p class="muted">MCP 服务注册与聚合管理平台</p>
+      <label>用户名<input id="loginUsername" value="admin" autocomplete="username" required /></label>
+      <label>密码<input id="loginPassword" type="password" autocomplete="current-password" required /></label>
+      <div id="loginError" class="form-error"></div>
+      <button class="primary full" type="submit">登录</button>
+      <p class="hint">默认账号 admin / admin123，登录后请到“用户”页面修改密码。</p>
+    </form>
+  </div>
+
+  <div id="appView" class="app-view hidden">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark small">M</div>
+        <div><strong>mcp-open</strong><span>MCP Gateway</span></div>
+      </div>
+      <nav>
+        <button class="nav-item active" data-section="overview">概览</button>
+        <button class="nav-item" data-section="servers">MCP 服务</button>
+        <button class="nav-item" data-section="bridges">小智云端</button>
+        <button class="nav-item" data-section="tokens">访问令牌</button>
+        <button class="nav-item" data-section="users">用户管理</button>
+        <button class="nav-item" data-section="settings">系统设置</button>
+        <button class="nav-item" data-section="audit">审计日志</button>
+      </nav>
+      <div class="sidebar-footer">v0.1.0 · Python</div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div><h2 id="pageTitle">概览</h2><p id="pageSubtitle" class="muted">掌握网关运行状态</p></div>
+        <div class="topbar-actions">
+          <span class="status-dot"></span><span id="gatewayStatus">运行正常</span>
+          <span id="currentUser" class="user-chip"></span>
+          <button id="logoutBtn" class="ghost">退出</button>
+        </div>
+      </header>
+
+      <section id="section-overview" class="section active">
+        <div id="statsGrid" class="stats-grid"></div>
+        <div class="grid-two">
+          <div class="card">
+            <div class="card-header"><h3>快速接入</h3><button class="link" data-action="copy-endpoint">复制地址</button></div>
+            <p class="muted">统一 MCP 端点支持 Streamable HTTP 与 legacy SSE；小智通过 WebSocket 接入。</p>
+            <pre id="endpointSnippet">POST  http(s)://&lt;host&gt;/mcp
+GET   http(s)://&lt;host&gt;/sse
+WS    ws(s)://&lt;host&gt;/ws/xiaozhi</pre>
+            <p class="muted">请求头：<code>Authorization: Bearer &lt;API Token&gt;</code></p>
+          </div>
+          <div class="card">
+            <div class="card-header"><h3>最近操作</h3><button class="link" data-section-link="audit">查看全部</button></div>
+            <div id="recentAudits" class="timeline"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="section-servers" class="section">
+        <div class="toolbar">
+          <div><h3>已注册的 MCP 服务</h3><p class="muted">支持本地 stdio、HTTP Streamable 与 SSE 服务</p></div>
+          <div class="toolbar-actions">
+            <button id="refreshToolsBtn" class="ghost">刷新工具缓存</button>
+            <button id="addServerBtn" class="primary">注册服务</button>
+          </div>
+        </div>
+        <div class="card table-card"><table><thead><tr><th>名称</th><th>传输方式</th><th>地址/命令</th><th>状态</th><th>能力</th><th>超时</th><th>操作</th></tr></thead><tbody id="serversBody"></tbody></table></div>
+      </section>
+
+      <section id="section-bridges" class="section">
+        <div class="toolbar">
+          <div><h3>小智云端桥接</h3><p class="muted">可配置多个 wss 地址，让小智云使用本地聚合工具</p></div>
+          <button id="addBridgeBtn" class="primary">新增桥接</button>
+        </div>
+        <div class="card table-card"><table><thead><tr><th>名称</th><th>WebSocket 地址</th><th>连接状态</th><th>启用</th><th>最近错误</th><th>操作</th></tr></thead><tbody id="bridgesBody"></tbody></table></div>
+      </section>
+
+      <section id="section-tokens" class="section">
+        <div class="toolbar">
+          <div><h3>API Token</h3><p class="muted">为小智、WorkBuddy 等客户端分配最小权限</p></div>
+          <button id="addTokenBtn" class="primary">创建 Token</button>
+        </div>
+        <div class="card table-card"><table><thead><tr><th>名称</th><th>前缀</th><th>权限</th><th>服务范围</th><th>状态</th><th>最近使用</th><th>操作</th></tr></thead><tbody id="tokensBody"></tbody></table></div>
+      </section>
+
+      <section id="section-users" class="section">
+        <div class="toolbar"><div><h3>后台用户</h3><p class="muted">管理可登录管理页面的账号</p></div><button id="addUserBtn" class="primary">新增用户</button></div>
+        <div class="card table-card"><table><thead><tr><th>用户名</th><th>角色</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody id="usersBody"></tbody></table></div>
+      </section>
+
+      <section id="section-settings" class="section">
+        <div class="toolbar"><div><h3>系统设置</h3><p class="muted">自定义网关名称、超时与授权器</p></div></div>
+        <form id="settingsForm" class="card form-card"></form>
+      </section>
+
+      <section id="section-audit" class="section">
+        <div class="toolbar"><div><h3>审计日志</h3><p class="muted">记录管理操作，便于追踪</p></div></div>
+        <div class="card table-card"><table><thead><tr><th>时间</th><th>操作者</th><th>动作</th><th>对象</th><th>详情</th></tr></thead><tbody id="auditBody"></tbody></table></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden">
+    <div class="modal">
+      <div class="modal-header"><h3 id="modalTitle">编辑</h3><button id="modalClose" class="icon-btn">×</button></div>
+      <div id="modalBody" class="modal-body"></div>
+    </div>
+  </div>
+  <div id="toast" class="toast hidden"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

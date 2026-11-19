@@ -1,0 +1,38 @@
+name: mcp-open
+
+services:
+  mcp-open:
+    build: .
+    image: mcp-open:latest
+    container_name: mcp-open
+    restart: unless-stopped
+
+    ports:
+      - "${MCPOPEN_PORT:-8765}:8765"
+
+    environment:
+      MCPOPEN_HOST: 0.0.0.0
+      MCPOPEN_PORT: 8765
+      MCPOPEN_DB: /app/data/mcp-open.db
+      MCPOPEN_ADMIN_USER: ${MCPOPEN_ADMIN_USER:-admin}
+      MCPOPEN_ADMIN_PASSWORD: ${MCPOPEN_ADMIN_PASSWORD:-admin123}
+      MCPOPEN_SECRET_KEY: ${MCPOPEN_SECRET_KEY:-}
+      MCPOPEN_SERVER_NAME: ${MCPOPEN_SERVER_NAME:-mcp-open}
+      MCPOPEN_TIMEOUT: ${MCPOPEN_TIMEOUT:-30}
+      MCPOPEN_AUTH_AUTHORIZER: ${MCPOPEN_AUTH_AUTHORIZER:-}
+      MCPOPEN_CORS_ORIGINS: ${MCPOPEN_CORS_ORIGINS:-*}
+      MCPOPEN_DEBUG: ${MCPOPEN_DEBUG:-false}
+
+      # 供桥接地址和上游请求头中的 ${VAR} 占位符使用
+      XIAOZHI_MCP_TOKEN: ${XIAOZHI_MCP_TOKEN:-}
+      UPSTREAM_TOKEN: ${UPSTREAM_TOKEN:-}
+
+    volumes:
+      - ./data:/app/data
+
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
