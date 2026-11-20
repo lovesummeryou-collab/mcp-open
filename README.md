@@ -70,6 +70,46 @@ Compose 会自动读取 `.env` 做变量替换。
 
 如果想接入 Windows 宿主机上的本地 stdio 服务，建议先把它暴露成 HTTP/SSE MCP 服务，或者把源码挂载进容器后再用容器路径启动。
 
+### SQLite disk I/O error
+
+如果启动时出现：
+
+```text
+sqlite3.OperationalError: disk I/O error
+PRAGMA journal_mode=WAL
+```
+
+程序会自动回退到 `DELETE` journal 模式。若仍然失败，多半是 Windows 的 bind mount 不支持 SQLite 文件锁，或 `./data` 权限不对。
+
+可以在 `.env` 中强制使用兼容模式：
+
+```text
+MCPOPEN_SQLITE_JOURNAL=delete
+```
+
+然后：
+
+```powershell
+docker compose down
+docker compose up -d --build
+```
+
+也可以把 `docker-compose.yml` 里的 `./data:/app/data` 改成命名卷：
+
+```yaml
+volumes:
+  - mcp-data:/app/data
+```
+
+并在文件底部添加：
+
+```yaml
+volumes:
+  mcp-data:
+```
+
+命名卷在 Windows Docker Desktop 下通常比 bind mount 更适合 SQLite。
+
 ## 注册 MCP 服务
 
 ### 本地 stdio
@@ -250,6 +290,7 @@ wss://api.xiaozhi.me/mcp/?token=${XIAOZHI_MCP_TOKEN}
 | `MCPOPEN_TIMEOUT` | `30` | 上游默认超时 |
 | `MCPOPEN_AUTH_AUTHORIZER` | 空 | 默认自定义授权器 |
 | `MCPOPEN_DEBUG` | `false` | 调试模式与自动重载 |
+| `MCPOPEN_SQLITE_JOURNAL` | `auto` | SQLite journal 模式：`auto` 优先 WAL，不支持时回退 DELETE；也可强制 `wal` 或 `delete` |
 
 完整示例见 `.env.example`。本项目不自动读取 `.env` 文件，请在启动前设置到当前 shell。
 

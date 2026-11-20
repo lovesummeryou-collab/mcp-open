@@ -1,20 +1,47 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
-from .config import DB_PATH
+from .config import DB_PATH, SQLITE_JOURNAL
 from .security import hash_password
 
 _LOCK = threading.RLock()
+_LOGGER = logging.getLogger("mcp-open.db")
+_WAL_FALLBACK_LOGGED = False
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _configure_journal(conn: sqlite3.Connection) -> None:
+    global _WAL_FALLBACK_LOGGED
+    conn.execute("PRAGMA busy_timeout=15000")
+
+    def try_mode(mode: str, warn: bool = False) -> bool:
+        try:
+            conn.execute(f"PRAGMA journal_mode={mode}")
+            return True
+        except sqlite3.OperationalError as exc:
+            if warn and not _WAL_FALLBACK_LOGGED:
+                _LOGGER.warning("SQLite %s 模式不可用，改用默认模式: %s", mode, exc)
+                _WAL_FALLBACK_LOGGED = True
+            return False
+
+    if SQLITE_JOURNAL == "wal":
+        try_mode("WAL", warn=True)
+        return
+    if SQLITE_JOURNAL == "delete":
+        try_mode("DELETE")
+        return
+    if not try_mode("WAL"):
+        try_mode("DELETE", warn=True)
 
 
 @contextmanager
@@ -22,7 +49,7 @@ def connect():
     with _LOCK:
         conn = sqlite3.connect(DB_PATH, timeout=15, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    _configure_journal(conn)
     conn.execute("PRAGMA foreign_keys=ON")
     try:
         yield conn

@@ -51,3 +51,4 @@ TOKEN_HEADER = "authorization"
 TOKEN_QUERY_NAMES = ("token", "api_key", "access_token")
 PROTOCOL_VERSION = "2025-06-18"
 SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
+SQLITE_JOURNAL = os.getenv("MCPOPEN_SQLITE_JOURNAL", "auto").strip().lower()
