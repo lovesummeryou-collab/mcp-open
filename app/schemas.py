@@ -69,6 +69,7 @@ class BridgeBase(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     url: str = Field(min_length=1, max_length=2000)
     enabled: bool = True
+    allowed_services: str | list[int] | list[str] = "*"
 
     @field_validator("url")
     @classmethod
@@ -89,6 +90,7 @@ class BridgeUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     url: str | None = Field(default=None, min_length=1, max_length=2000)
     enabled: bool | None = None
+    allowed_services: str | list[int] | list[str] | None = None
 
     @field_validator("url")
     @classmethod

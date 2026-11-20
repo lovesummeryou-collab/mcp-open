@@ -62,6 +62,7 @@ class BridgeConnection:
         self.raw_url = str(row["url"] or "")
         self.url = str(expand_env(self.raw_url) or "").strip()
         self.enabled = bool(row["enabled"])
+        self.allowed_services = auth.parse_allowed_services(row.get("allowed_services") or "*")
         self.connected = False
         self.last_error: str | None = None
         self._websocket: Any = None
@@ -73,6 +74,7 @@ class BridgeConnection:
             str(row["name"]) == self.name
             and str(expand_env(row["url"] or "") or "").strip() == self.url
             and bool(row["enabled"]) == self.enabled
+            and auth.parse_allowed_services(row.get("allowed_services") or "*") == self.allowed_services
         )
 
     def status(self) -> dict[str, Any]:
@@ -82,6 +84,7 @@ class BridgeConnection:
             "enabled": self.enabled,
             "connected": self.connected,
             "url": redact_url(self.url) if self.url else "",
+            "allowedServices": self.allowed_services,
             "lastError": self.last_error,
         }
 
@@ -168,7 +171,7 @@ class BridgeConnection:
             token_id=0,
             name=f"xiaozhi-bridge:{self.name}",
             scopes={"mcp:read", "mcp:call", "ws:connect"},
-            allowed_services="*",
+            allowed_services=self.allowed_services,
         )
         async for raw in websocket:
             try:

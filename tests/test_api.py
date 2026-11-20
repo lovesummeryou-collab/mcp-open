@@ -69,26 +69,54 @@ def test_bridge_crud_and_masking():
     with TestClient(app) as client:
         assert client.post("/api/auth/login", json={"username": "admin", "password": "admin123"}).status_code == 200
         name = f"bridge-{uuid.uuid4().hex[:8]}"
+        server_name = f"bridge-target-{uuid.uuid4().hex[:8]}"
+        now = db.utc_now()
+        server_id = db.execute(
+            "INSERT INTO servers(name, transport, command, args, cwd, env, url, headers, enabled, timeout, created_at, updated_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                server_name,
+                "http",
+                None,
+                "[]",
+                None,
+                "{}",
+                "http://example.invalid/mcp",
+                "{}",
+                0,
+                5,
+                now,
+                now,
+            ),
+        )
         created = client.post(
             "/api/bridges",
-            json={"name": name, "url": "wss://example.invalid/mcp/?token=super-secret", "enabled": False},
+            json={
+                "name": name,
+                "url": "wss://example.invalid/mcp/?token=super-secret",
+                "enabled": False,
+                "allowed_services": [server_id],
+            },
         )
         assert created.status_code == 201, created.text
         data = created.json()
         assert "super-secret" not in data["displayUrl"]
         assert data["connected"] is False
+        assert server_name in data["allowed_service_names"]
 
         try:
             rows = client.get("/api/bridges").json()
             assert any(row["id"] == data["id"] for row in rows)
             updated = client.put(
                 f"/api/bridges/{data['id']}",
-                json={"name": f"{name}-updated", "enabled": False},
+                json={"name": f"{name}-updated", "enabled": False, "allowed_services": "*"},
             )
             assert updated.status_code == 200, updated.text
             assert updated.json()["name"] == f"{name}-updated"
+            assert updated.json()["allowed_service_names"] == ["全部服务"]
         finally:
             assert client.delete(f"/api/bridges/{data['id']}").status_code == 200
+            db.execute("DELETE FROM servers WHERE id=?", (server_id,))
 
 
 def test_server_list_includes_capabilities():

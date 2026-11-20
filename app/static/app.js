@@ -149,6 +149,7 @@ async function loadBridges() {
     return `<tr>
       <td><strong>${escapeHtml(row.name)}</strong><span class="sub">ID ${row.id}</span></td>
       <td><code title="${escapeHtml(row.displayUrl)}">${escapeHtml(row.displayUrl)}</code></td>
+      <td>${formatServices(row.allowed_services, row.allowed_service_names || [])}</td>
       <td><span class="badge ${statusClass}">${statusText}</span></td>
       <td><span class="badge ${row.enabled ? 'on' : 'off'}">${row.enabled ? '启用' : '停用'}</span></td>
       <td>${escapeHtml(error)}</td>
@@ -159,7 +160,7 @@ async function loadBridges() {
         <button class="danger" data-action="delete-bridge" data-id="${row.id}">删除</button>
       </div></td>
     </tr>`;
-  }).join('') : '<tr><td colspan="6" class="muted">尚未配置小智云端桥接</td></tr>';
+  }).join('') : '<tr><td colspan="7" class="muted">尚未配置小智云端桥接</td></tr>';
 }
 
 async function loadTokens() {
@@ -288,22 +289,73 @@ function serverModal(row = null) {
   });
 }
 
-function bridgeModal(row = null) {
+async function bridgeModal(row = null) {
   state.editingBridge = row;
+  let services = [];
+  try { services = await api('/api/servers'); } catch (error) { toast(error.message, true); }
+
+  const allowedRaw = row?.allowed_services ?? '*';
+  const isAll = allowedRaw === '*' || (Array.isArray(allowedRaw) && allowedRaw.includes('*'));
+  const allowedIds = new Set(
+    Array.isArray(allowedRaw)
+      ? allowedRaw.map(String)
+      : String(allowedRaw).split(',').map((item) => item.trim()).filter(Boolean)
+  );
+  const knownIds = new Set(services.map((item) => String(item.id)));
+  const serviceOptions = services.map((item) => `
+    <label><input type="checkbox" name="allowed_service" value="${item.id}" ${allowedIds.has(String(item.id)) ? 'checked' : ''}/> ${escapeHtml(item.name)}</label>
+  `).join('');
+  const unknownIds = [...allowedIds].filter((id) => id !== '*' && !knownIds.has(id));
+  const unknownOptions = unknownIds.map((id) => `
+    <label><input type="checkbox" name="allowed_service" value="${escapeHtml(id)}" checked/> #${escapeHtml(id)}（服务已删除）</label>
+  `).join('');
+
   openModal(row ? `编辑桥接：${row.name}` : '新增小智云端桥接', `
     <form id="bridgeForm" class="form-grid">
       <label class="full">桥接名称<input name="name" required value="${escapeHtml(row?.name || '')}" placeholder="例如 我的小智助手" /></label>
       <label class="full">WebSocket 地址<span class="form-help">以 ws:// 或 wss:// 开头。建议用 \${XIAOZHI_MCP_TOKEN} 占位符代替明文 token。</span><input name="url" required value="${escapeHtml(row?.url || '')}" placeholder="wss://api.xiaozhi.me/mcp/?token=\${XIAOZHI_MCP_TOKEN}" /></label>
+      <div class="full">
+        <label style="font-size:13px;font-weight:600">暴露给小智云端的 MCP 服务</label>
+        <div class="checkbox-row" id="bridgeServices" style="margin-top:8px">
+          <label><input type="checkbox" name="allowed_all" value="*" ${isAll ? 'checked' : ''}/> 全部服务</label>
+          ${serviceOptions || '<span class="muted">暂无已注册服务</span>'}
+          ${unknownOptions}
+        </div>
+        <div class="form-help" style="margin-top:6px">勾选“全部服务”会暴露当前及后续新增的所有服务；否则只暴露勾选的服务。</div>
+      </div>
       <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" name="enabled" style="width:auto" ${row?.enabled === false ? '' : 'checked'} /> 启用桥接</label>
       <div class="form-actions full"><button type="button" class="ghost" data-action="close-modal">取消</button><button class="primary" type="submit">保存</button></div>
     </form>`);
+
+  const allBox = $('input[name="allowed_all"]');
+  const serviceBoxes = $$('input[name="allowed_service"]');
+  const syncServiceBoxes = () => {
+    serviceBoxes.forEach((box) => {
+      box.disabled = allBox.checked;
+      if (allBox.checked) box.checked = true;
+    });
+  };
+  allBox.addEventListener('change', syncServiceBoxes);
+  serviceBoxes.forEach((box) => box.addEventListener('change', () => {
+    if (box.checked && allBox.checked) allBox.checked = false;
+    syncServiceBoxes();
+  }));
+  syncServiceBoxes();
+
   $('#bridgeForm').addEventListener('submit', async (event) => {
     event.preventDefault();
     const form = new FormData(event.target);
+    const allServices = form.has('allowed_all');
+    const selected = form.getAll('allowed_service');
+    if (!allServices && selected.length === 0) {
+      toast('请至少选择一个服务，或勾选“全部服务”', true);
+      return;
+    }
     const payload = {
       name: form.get('name').trim(),
       url: form.get('url').trim(),
-      enabled: form.has('enabled')
+      enabled: form.has('enabled'),
+      allowed_services: allServices ? '*' : selected
     };
     try {
       if (state.editingBridge) await api(`/api/bridges/${state.editingBridge.id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -462,7 +514,7 @@ document.addEventListener('click', async (event) => {
   if (action === 'copy-endpoint') return copyText(`${location.origin}/mcp`);
   if (action === 'copy-token') return copyText($('#newToken')?.textContent || '');
   if (action === 'edit-server') return serverModal(window._servers.find((item) => item.id === id));
-  if (action === 'edit-bridge') return bridgeModal(window._bridges.find((item) => item.id === id));
+  if (action === 'edit-bridge') return await bridgeModal(window._bridges.find((item) => item.id === id));
   if (action === 'edit-token') return await tokenModal(window._tokens.find((item) => item.id === id));
   if (action === 'edit-user') return userModal(window._users.find((item) => item.id === id));
   if (action === 'delete-server' && confirm('确认删除该 MCP 服务？')) {

@@ -140,11 +140,20 @@ def init_db() -> None:
                 name TEXT NOT NULL UNIQUE,
                 url TEXT NOT NULL,
                 enabled INTEGER NOT NULL DEFAULT 1,
+                allowed_services TEXT NOT NULL DEFAULT '*',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
             """
         )
+
+        bridge_columns = {
+            row["name"] for row in conn.execute("PRAGMA table_info(xiaozhi_bridges)").fetchall()
+        }
+        if "allowed_services" not in bridge_columns:
+            conn.execute(
+                "ALTER TABLE xiaozhi_bridges ADD COLUMN allowed_services TEXT NOT NULL DEFAULT '*'"
+            )
 
         from .config import ADMIN_PASSWORD, ADMIN_USERNAME, DEFAULT_TIMEOUT
 
@@ -176,8 +185,8 @@ def init_db() -> None:
             count = conn.execute("SELECT COUNT(*) AS c FROM xiaozhi_bridges").fetchone()["c"]
             if count == 0:
                 conn.execute(
-                    "INSERT INTO xiaozhi_bridges(name, url, enabled, created_at, updated_at) VALUES (?,?,?,?,?)",
-                    ("默认小智云端", legacy["value"].strip(), 1, utc_now(), utc_now()),
+                    "INSERT INTO xiaozhi_bridges(name, url, enabled, allowed_services, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+                    ("默认小智云端", legacy["value"].strip(), 1, "*", utc_now(), utc_now()),
                 )
             conn.execute("UPDATE settings SET value='' WHERE key='xiaozhi_bridge_url'")
 

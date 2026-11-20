@@ -44,21 +44,34 @@ def _server_out(row: Any) -> dict[str, Any]:
     return as_dict(row)
 
 
-def _token_out(row: Any) -> dict[str, Any]:
-    value = dict(row)
+def _parse_allowed_services(raw: Any) -> Any:
     try:
-        allowed = json.loads(value.get("allowed_services") or "*")
-    except ValueError:
-        allowed = value.get("allowed_services") or "*"
+        allowed = json.loads(raw or "*")
+    except (TypeError, ValueError):
+        allowed = raw or "*"
+    if isinstance(allowed, str) and allowed.strip().startswith("["):
+        try:
+            allowed = json.loads(allowed)
+        except ValueError:
+            pass
+    return allowed
 
-    allowed_service_names: list[str] = []
+
+def _service_names(allowed: Any) -> list[str]:
     if allowed == "*" or (isinstance(allowed, list) and "*" in allowed):
-        allowed_service_names = ["全部服务"]
-    elif isinstance(allowed, list) and allowed:
+        return ["全部服务"]
+    if isinstance(allowed, list) and allowed:
         placeholders = ",".join("?" for _ in allowed)
         rows = db.query_all(f"SELECT id, name FROM servers WHERE id IN ({placeholders})", allowed)
         name_by_id = {str(row["id"]): row["name"] for row in rows}
-        allowed_service_names = [name_by_id.get(str(item), f"#{item}") for item in allowed]
+        return [name_by_id.get(str(item), f"#{item}") for item in allowed]
+    return []
+
+
+def _token_out(row: Any) -> dict[str, Any]:
+    value = dict(row)
+    allowed = _parse_allowed_services(value.get("allowed_services"))
+    allowed_service_names = _service_names(allowed)
 
     return {
         "id": value["id"],
@@ -89,12 +102,15 @@ def _user_out(row: Any) -> dict[str, Any]:
 def _bridge_out(row: Any, runtime: dict[str, Any] | None = None) -> dict[str, Any]:
     value = dict(row)
     runtime = runtime or {}
+    allowed = _parse_allowed_services(value.get("allowed_services"))
     return {
         "id": value["id"],
         "name": value["name"],
         "url": value["url"],
         "displayUrl": redact_url(str(value["url"] or "")),
         "enabled": bool(value["enabled"]),
+        "allowed_services": allowed,
+        "allowed_service_names": _service_names(allowed),
         "connected": bool(runtime.get("connected", False)),
         "lastError": runtime.get("lastError"),
         "created_at": value["created_at"],
@@ -310,8 +326,15 @@ async def create_bridge(
     now = db.utc_now()
     try:
         bridge_id = db.execute(
-            "INSERT INTO xiaozhi_bridges(name, url, enabled, created_at, updated_at) VALUES (?,?,?,?,?)",
-            (payload.name, payload.url, int(payload.enabled), now, now),
+            "INSERT INTO xiaozhi_bridges(name, url, enabled, allowed_services, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            (
+                payload.name,
+                payload.url,
+                int(payload.enabled),
+                _allowed_services_text(payload.allowed_services),
+                now,
+                now,
+            ),
         )
     except Exception as exc:
         if "UNIQUE" in str(exc):
@@ -336,10 +359,15 @@ async def update_bridge(
     name = payload.name if payload.name is not None else row["name"]
     url = payload.url if payload.url is not None else row["url"]
     enabled = int(payload.enabled) if payload.enabled is not None else row["enabled"]
+    allowed = (
+        _allowed_services_text(payload.allowed_services)
+        if payload.allowed_services is not None
+        else row["allowed_services"]
+    )
     try:
         db.execute(
-            "UPDATE xiaozhi_bridges SET name=?, url=?, enabled=?, updated_at=? WHERE id=?",
-            (name, url, enabled, db.utc_now(), bridge_id),
+            "UPDATE xiaozhi_bridges SET name=?, url=?, enabled=?, allowed_services=?, updated_at=? WHERE id=?",
+            (name, url, enabled, allowed, db.utc_now(), bridge_id),
         )
     except Exception as exc:
         if "UNIQUE" in str(exc):

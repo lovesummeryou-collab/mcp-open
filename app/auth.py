@@ -66,7 +66,7 @@ def _extract_token(request: Request | None, websocket: Any | None = None) -> str
     return auth.strip() or None
 
 
-def _parse_allowed_services(raw: Any) -> Any:
+def parse_allowed_services(raw: Any) -> Any:
     if raw is None:
         return "*"
     if isinstance(raw, str):
@@ -83,6 +83,9 @@ def _parse_allowed_services(raw: Any) -> Any:
     if isinstance(raw, (list, tuple, set)):
         return [str(item) for item in raw]
     return [str(raw)]
+
+
+_parse_allowed_services = parse_allowed_services
 
 
 def principal_from_token(token: str | None) -> Principal:
