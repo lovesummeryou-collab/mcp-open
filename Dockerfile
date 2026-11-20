@@ -9,12 +9,15 @@ WORKDIR /app
 
 RUN useradd --create-home --shell /bin/bash appuser
 
-COPY requirements.txt ./
+COPY --chown=appuser:appuser requirements.txt ./
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-COPY . .
+COPY --chown=appuser:appuser . .
 
-RUN mkdir -p /app/data && chown -R appuser:appuser /app
+RUN mkdir -p /app/data \
+    && chown -R appuser:appuser /app \
+    && chmod -R a+rX /app \
+    && chmod +x /app/run.py
 
 USER appuser
 
@@ -27,4 +30,4 @@ EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=3)"
 
-CMD ["python", "run.py"]
+CMD ["python", "/app/run.py"]
